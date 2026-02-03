@@ -60,6 +60,3 @@ No build tools required.
 
 ## Copyright
 © Nick Nayak. All rights reserved.
-cd anvil-enchant-planner
-Then open index.html in a browser
-(or use VS Code Live Server for best results).
