@@ -47,16 +47,16 @@ No build tools required.
    *(or use a local server like VS Code Live Server)*
 
 ## Limitations / Notes
-  One enchantment per book (for now)
-  Java Edition ruleset
-  Designed for modern anvil mechanics (1.20+)
+- One enchantment per book (for now)
+- Java Edition ruleset
+- Designed for modern anvil mechanics (1.20+)
 
 ## Future Ideas to work on
-  Multi-enchant books
-  Bedrock Edition support
-  XP vs level visualization
-  Shareable permalink
-  Mobile UI improvements
+- Multi-enchant books
+- Bedrock Edition support
+- XP vs level visualization
+- Shareable permalink
+- Mobile UI improvements
 
 ## Copyright
 © Nick Nayak. All rights reserved.
