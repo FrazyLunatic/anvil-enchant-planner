@@ -1,0 +1,1525 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Anvil Enchant Planner</title>
+  <!-- Favicon -->
+  <link rel="icon" href="./icons/favicon.ico">
+  <!-- PNG fallbacks -->
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
+  <!-- Apple Touch Icon (iOS / iPadOS) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#0b1227">
+  <style>
+    :root{
+      --bg:#070b17;
+      --panel:#0b1227;
+      --panel2:#0d1630;
+      --stroke:#1b2a55;
+      --text:#d9e2ff;
+      --muted:#9fb0e6;
+      --accent:#7c6cff;
+      --accent2:#a78bfa;
+      --good:#38d39f;
+      --bad:#ff5c7a;
+      --warn:#ffb020;
+      --shadow: 0 24px 60px rgba(0,0,0,.45);
+      --r:18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      background:
+        radial-gradient(1200px 600px at 50% -150px, rgba(124,108,255,.35), transparent 60%),
+        radial-gradient(900px 500px at 80% 0px, rgba(167,139,250,.25), transparent 55%),
+        linear-gradient(180deg, #060a14, var(--bg) 40%);
+      color:var(--text);
+      min-height:100vh;
+    }
+    .wrap{max-width:980px;margin:0 auto;padding:36px 18px 56px}
+    header{ text-align:center; margin-bottom:18px; }
+    .title{
+      font-size:44px;
+      letter-spacing:.5px;
+      font-weight:800;
+      margin:12px 0 6px;
+      background:linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip:text;background-clip:text;color:transparent;
+      text-shadow: 0 10px 40px rgba(124,108,255,.12);
+    }
+    .subtitle{
+      margin:0 auto;
+      max-width:760px;
+      color:var(--muted);
+      line-height:1.45;
+      font-size:15px;
+    }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:14px; margin-top:22px; }
+    @media (min-width: 940px){ .grid{grid-template-columns: 1.2fr .8fr} }
+    .card .bd{
+      display:flex;
+      flex-direction:column;
+    }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border:1px solid var(--stroke);
+      border-radius:var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 16px;
+      background:linear-gradient(180deg, rgba(255,255,255,.03), transparent);
+      border-bottom:1px solid rgba(27,42,85,.7);
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+    }
+    .card .hd .h{ font-weight:800; letter-spacing:.2px; }
+    .pill{
+      font-size:12px;
+      color:var(--muted);
+      border:1px solid rgba(27,42,85,.9);
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(11,18,39,.65);
+    }
+    .bd{padding:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > .field{flex:1 1 240px}
+    .field label{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      margin:0 0 8px;
+    }
+    select, input[type="number"], input[type="text"]{
+      width:100%;
+      padding:12px 12px;
+      border-radius:12px;
+      border:1px solid rgba(27,42,85,.95);
+      background:rgba(8,13,29,.55);
+      color:var(--text);
+      outline:none;
+    }
+    input[type="checkbox"]{transform:translateY(1px)}
+    .hint{color:var(--muted);font-size:12px;line-height:1.4;margin-top:6px}
+
+    .ench-grid{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap:10px;
+      margin-top:10px;
+    }
+    @media (min-width: 760px){ .ench-grid{grid-template-columns: repeat(3, minmax(0, 1fr))} }
+
+    /* Tile becomes a 2-row grid */
+    .tile{
+    border:1px solid rgba(27,42,85,.9);
+    background:rgba(11,18,39,.55);
+    border-radius:14px;
+    padding:12px;
+    cursor:pointer;
+    user-select:none;
+    transition: transform .08s ease, border-color .12s ease, background .12s ease;
+
+    /* layout */
+    display:grid;
+    grid-template-columns: 44px 1fr;    /* icon + content */
+    grid-template-rows: auto auto 1fr;  /* title, controls, spacer */
+    gap:8px 12px;
+    align-items:start;                  /* prevents dropdown drifting */
+    overflow:hidden;                    /* hard stop: nothing can hang out */
+    }
+
+    .tile:hover{
+    transform:translateY(-1px);
+    border-color:rgba(124,108,255,.55);
+    }
+
+    .tile.on{
+    border-color:rgba(124,108,255,.85);
+    background:rgba(124,108,255,.12);
+    }
+
+    /* Icon: keep it TOP-left (do NOT span rows) */
+    .tile .icon{
+    grid-column:1;
+    grid-row:1;
+    align-self:start;
+    }
+
+    /* Title: full wrap */
+    .tile .name{
+    grid-column:2;
+    grid-row:1;
+    font-weight:800;
+    font-size:14px;
+    line-height:1.2;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    }
+
+    /* Controls row: max + dropdown always inside */
+    .tile .controls{
+    grid-column:2;
+    grid-row:2;
+    display:flex;
+    align-items:center;
+    justify-content:space-between; /* pins dropdown to right edge */
+    gap:10px;
+    min-width:0;
+    flex-wrap:wrap;               /* if narrow, wraps instead of overlapping */
+    }
+
+    /* max label */
+    .tile .sub{
+    color:var(--muted);
+    font-size:12px;
+    margin:0;
+    white-space:nowrap;
+    flex:0 0 auto;
+    }
+
+    /* dropdown wrapper */
+    .tile .lvl{
+    flex:0 0 auto;
+    max-width:100%;
+    }
+
+    /* dropdown narrower + safe sizing */
+    .tile .lvl select{
+    width:58px;
+    max-width:100%;
+    box-sizing:border-box;
+    padding:7px 8px;
+    border-radius:12px;
+    font-family:var(--mono);
+    font-size:12px;
+    background:rgba(8,13,29,.75);
+    border:1px solid rgba(27,42,85,.95);
+    color:var(--text);
+    }
+
+    .tile .lvl select:focus{
+    border-color:rgba(124,108,255,.75);
+    box-shadow:0 0 0 3px rgba(124,108,255,.18);
+    }
+
+    .rules-btn{
+      margin-top:14px;
+      padding:8px 14px;
+      border-radius:999px;
+      border:1px solid rgba(27,42,85,.9);
+      background:rgba(11,18,39,.65);
+      color:var(--text);
+      font-weight:800;
+      cursor:pointer;
+    }
+    .rules-btn:hover{
+      border-color:rgba(124,108,255,.75);
+    }
+
+    /* overlay */
+    .rules-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(6,10,20,.6);
+      backdrop-filter: blur(6px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:999;
+    }
+
+    /* modal */
+    .rules-modal{
+      width:min(520px, 92vw);
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+    }
+
+    .rules-hd{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:14px 16px;
+      border-bottom:1px solid rgba(27,42,85,.7);
+    }
+
+    .rules-hd h3{
+      margin:0;
+      font-size:18px;
+      font-weight:900;
+    }
+
+    .rules-hd button{
+      background:none;
+      border:none;
+      color:var(--muted);
+      font-size:18px;
+      cursor:pointer;
+    }
+
+    .rules-bd{
+      padding:16px;
+      font-size:14px;
+      line-height:1.5;
+    }
+
+    .rules-bd ul{
+      padding-left:18px;
+      margin:0 0 12px;
+    }
+
+    .rules-bd li{
+      margin-bottom:8px;
+    }
+
+    .rules-note{
+      color:var(--muted);
+      font-size:13px;
+      margin:0;
+    }
+    .rules-overlay[hidden] { 
+      display: none !important; 
+    }
+    .icon{
+      width:38px;height:38px;border-radius:10px;
+      border:1px solid rgba(27,42,85,.9);
+      background:rgba(6,10,20,.55);
+      display:flex;align-items:center;justify-content:center;
+      flex:0 0 auto;
+      overflow:hidden;
+    }
+    .icon img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
+    .btnbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    
+    .btn{
+      border:none;
+      padding:12px 14px;
+      border-radius:14px;
+      background:linear-gradient(90deg, var(--accent), var(--accent2));
+      color:white;
+      font-weight:900;
+      letter-spacing:.2px;
+      cursor:pointer;
+      display:inline-flex;align-items:center;gap:10px;
+      box-shadow: 0 14px 34px rgba(124,108,255,.22);
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn.secondary{
+      background:rgba(11,18,39,.7);
+      border:1px solid rgba(27,42,85,.9);
+      box-shadow:none;
+      color:var(--text);
+      font-weight:800;
+    }
+    .btn svg{width:18px;height:18px}
+    .grid { align-items: stretch; }
+    .card { height: 100%; }
+
+    /* Scroll behavior */
+    .result{
+      flex:1 1 auto;
+      min-height:0;
+      overflow:auto;
+    }
+
+    /* The old visual styling you removed by accident */
+    .resultBox{
+      font-family:var(--mono);
+      font-size:12.6px;
+      line-height:1.45;
+      background:rgba(6,10,20,.55);
+      border:1px solid rgba(27,42,85,.9);
+      border-radius:14px;
+      padding:12px;
+    }
+
+    .resultWrap{
+      display:flex;
+      flex-direction:column;
+      flex:1 1 auto;
+      min-height:0; /* critical for overflow to work in flex */
+    }
+    /* Caption stays at the bottom */
+    .resultCaption{
+      flex:0 0 auto;
+      margin-top:10px;
+    }
+    .rhdr{
+      border: 1px solid rgba(27,42,85,.7);
+      background: rgba(11,18,39,.35);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+
+    .rhdr .line{ color: var(--muted); margin: 2px 0; }
+    .rhdr b{ color: var(--text); font-weight: 900; }
+
+    .steps{ display:flex; flex-direction:column; gap:8px; }
+
+    .step{
+      border: 1px solid rgba(27,42,85,.7);
+      background: rgba(11,18,39,.28);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .step__top{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      gap:10px;
+    }
+
+    .step__title{
+      font-family: var(--sans);
+      font-weight: 900;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .step__meta{ color: var(--muted); margin-top: 4px; }
+
+    .costpill{
+      flex:0 0 auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(27,42,85,.9);
+      background: rgba(6,10,20,.55);
+      font-weight: 900;
+    }
+
+    .costpill.ok{ border-color: rgba(56,211,159,.45); color: #b9ffe6; }
+    .costpill.bad{ border-color: rgba(255,92,122,.45); color: #ffd1da; }
+
+    .eq{
+      margin-top: 6px;
+      color: var(--muted);
+    }
+    .eq b{ color: var(--text); font-weight: 900; }
+
+    .kpi{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .k{
+      background:rgba(11,18,39,.55);
+      border:1px solid rgba(27,42,85,.9);
+      border-radius:14px;
+      padding:10px 12px;
+    }
+    .k .t{color:var(--muted);font-size:11px}
+    .k .v{font-family:var(--mono);font-size:15px;font-weight:900;margin-top:4px}
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:999px;
+      border:1px solid rgba(27,42,85,.9);
+      background:rgba(11,18,39,.55);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .badge.good{border-color:rgba(56,211,159,.45);color:#b9ffe6}
+    .badge.bad{border-color:rgba(255,92,122,.45);color:#ffd1da}
+    .badge.warn{border-color:rgba(255,176,32,.45);color:#ffe8b6}
+    .sep{height:1px;background:rgba(27,42,85,.7);margin:14px 0}
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      z-index: 9999;
+    }
+
+    .modal.is-open {
+      display: block;
+    }
+
+    .modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+    }
+
+    .modal__panel {
+      position: relative;
+      width: min(720px, calc(100% - 32px));
+      margin: 64px auto;
+      background: #121826;
+      color: #e7eaf0;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .modal__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .modal__close {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .modal__help {
+      margin: 8px 0 12px;
+      opacity: 0.85;
+    }
+
+    .modal__textarea {
+      width: 100%;
+      height: 140px;
+      resize: vertical;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: #0b1020;
+      color: #d7ff73;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+    }
+
+    .modal__actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">Anvil Enchant Planner</div>
+      <p class="subtitle">
+        Welcome to the Anvil Enchantment Planner! The solver tries to keep every step under 39 levels so it's (Survival-valid). If impossible, it marks steps that would be “Too Expensive.”
+      </p>
+      <button id="rulesBtn" class="rules-btn">Anvil Rules</button>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: Builder -->
+      <section class="card">
+        <div class="hd">
+          <div class="h">Build</div>
+          <div class="pill" id="statePill">0 enchant(s) selected</div>
+        </div>
+        <div class="bd">
+          <div class="row">
+            <div class="field">
+              <label>Item</label>
+              <select id="itemSelect"></select>
+              <div class="hint">
+                 Choose an item to enchant!
+              </div>
+            </div>
+            <div class="field">
+              <label>Base item anvil uses</label>
+              <input id="itemUses" type="number" min="0" max="20" value="0" />
+              <div class="hint">This is how many times the item has been used in an anvil (before enchanting)</div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div class="field">
+              <label>Rename at the end?</label>
+              <div class="badge" style="display:flex;justify-content:space-between;gap:10px">
+                <span>Yes! Rename the item as well</span>
+                <span><input id="rename" type="checkbox" /></span>
+              </div>
+              <div class="hint">
+                 Selecting yes will add a +1 level cost at the end
+              </div>
+            </div>
+            <div class="field">
+              <label>Book anvil uses</label>
+              <select id="bookUsesMode">
+                <option value="0" selected>All books are fresh (0)</option>
+                <option value="ask">No, book has uses</option>
+              </select>
+              <div class="hint">For most setups books are unused.</div>
+            </div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="row" style="align-items:flex-end">
+            <div class="field" style="flex:1 1 520px">
+              <label>Enchantments for this item</label>
+              <div class="hint">Click tiles to add/remove. Level selector is per enchant.</div>
+            </div>
+            <div class="field" style="flex:0 0 auto">
+              <button class="btn secondary" id="clearBtn" type="button">Clear</button>
+            </div>
+          </div>
+
+          <div class="ench-grid" id="enchGrid"></div>
+
+          <div class="btnbar">
+            <button class="btn" id="calcBtn" type="button">
+              Calculate
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="btn secondary" id="demoBtn" type="button">Load Demo</button>
+            <button class="btn secondary" id="btnGenerateCommand" type="button">Generate Command</button>
+          </div>
+
+          <div class="hint" style="margin-top:10px">
+            <b>One Enchant Per Book</b> is all that is supported as of now. Will be working on adding more features later! :)
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Output -->
+      <section class="card">
+        <div class="hd">
+          <div class="h">Result</div>
+          <div id="validBadge" class="badge">Waiting…</div>
+        </div>
+        <div class="bd">
+          <div class="kpi">
+            <div class="k"><div class="t">Total cost</div><div class="v" id="kTotal">—</div></div>
+            <div class="k"><div class="t">Survival-valid</div><div class="v" id="kValid">—</div></div>
+            <div class="k"><div class="t">Base costs sum</div><div class="v" id="kBase">—</div></div>
+            <div class="k"><div class="t">PWP(Prior Work Penalty) sum</div><div class="v" id="kPwp">—</div></div>
+          </div>
+
+          <div class="resultWrap">
+            <div class="result resultBox" id="out">Select an item + enchants, then press Calculate.</div>
+            <div class="hint resultCaption">
+              “Base cost” = value of the right-side sacrifice after combination.
+              “PWP” = PWP(left) + PWP(right), where PWP(u)=2^u−1.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+<div id="commandModal" class="modal" aria-hidden="true">
+  <div class="modal__backdrop" data-close="true"></div>
+
+  <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="commandModalTitle">
+    <div class="modal__header">
+      <h3 id="commandModalTitle">Generated /give Command</h3>
+      <button class="modal__close" type="button" data-close="true">✕</button>
+    </div>
+
+    <p class="modal__help">Copy/paste into Minecraft chat (Java). This is just for fun.</p>
+
+    <textarea id="commandOutput" class="modal__textarea" readonly></textarea>
+
+    <div class="modal__actions">
+      <button id="btnCopyCommand" class="btn secondary" type="button">Copy</button>
+      <button class="btn secondary" type="button" data-close="true">Close</button>
+    </div>
+  </div>
+</div>
+<div id="rulesOverlay" class="rules-overlay" hidden>
+  <div class="rules-modal">
+    <div class="rules-hd">
+      <h3>Anvil Rules (Simplified)</h3>
+      <button id="rulesClose" type="button" aria-label="Close">✕</button>
+    </div>
+
+    <div class="rules-bd">
+      <ul>
+        <li><b>Each anvil use increases cost.</b> Items and books gain “prior work penalty” every time they’re used.</li>
+        <li><b>Cost = Base + Prior Work + Rename.</b> Base depends on the enchantment and level. Prior Work grows exponentially.</li>
+        <li><b>Survival limit is 39 levels.</b> Any single anvil step costing 40+ levels is <i>Too Expensive</i> in Survival.</li>
+        <li><b>Order matters.</b> Combining books together first is usually cheaper than adding them one-by-one.</li>
+        <li><b>Incompatible enchantments can’t mix.</b> (e.g. Sharpness vs Smite, Depth Strider vs Frost Walker).</li>
+        <li><b>Renaming adds +1 level</b> on the <i>final</i> anvil operation.</li>
+      </ul>
+
+      <p class="rules-note">
+        This planner automatically finds the cheapest valid order and only exceeds 39 levels as a last resort.
+      </p>
+    </div>
+  </div>
+</div>
+<script>
+/* =========================
+   DATA (Java edition rules)
+   ========================= */
+
+// Put Enchanted_Book.gif next to this HTML (same folder), or change the path:
+const ICON = {
+  enchBook: "./assets/Enchanted_Book.gif"
+};
+
+// Enchant max levels
+const ENCHANT_MAX = {
+  "Protection":4,"Fire Protection":4,"Blast Protection":4,"Projectile Protection":4,
+  "Thorns":3,"Unbreaking":3,"Mending":1,"Curse of Binding":1,"Curse of Vanishing":1,
+  "Feather Falling":4,"Depth Strider":3,"Frost Walker":2,"Soul Speed":3,
+  "Respiration":3,"Aqua Affinity":1,"Swift Sneak":3,
+  "Sharpness":5,"Smite":5,"Bane of Arthropods":5,"Knockback":2,"Fire Aspect":2,
+  "Looting":3,"Sweeping Edge":3,
+  "Efficiency":5,"Silk Touch":1,"Fortune":3,
+  "Power":5,"Punch":2,"Flame":1,"Infinity":1,
+  "Multishot":1,"Piercing":4,"Quick Charge":3,
+  "Impaling":5,"Riptide":3,"Loyalty":3,"Channeling":1,
+  "Luck of the Sea":3,"Lure":3,
+  "Wind Burst":3,"Density":5,"Breach":4,"Lunge":3
+};
+
+// Cost multipliers (item, book). Solver uses BOOK multiplier for book values.
+const MULT = {
+  "Protection":[1,1],
+  "Fire Protection":[2,1],
+  "Feather Falling":[2,1],
+  "Blast Protection":[4,2],
+  "Projectile Protection":[2,1],
+  "Thorns":[8,4],
+  "Respiration":[4,2],
+  "Depth Strider":[4,2],
+  "Aqua Affinity":[4,2],
+  "Sharpness":[1,1],
+  "Smite":[2,1],
+  "Bane of Arthropods":[2,1],
+  "Knockback":[2,1],
+  "Fire Aspect":[4,2],
+  "Looting":[4,2],
+  "Efficiency":[1,1],
+  "Silk Touch":[8,4],
+  "Unbreaking":[2,1],
+  "Fortune":[4,2],
+  "Power":[1,1],
+  "Punch":[4,2],
+  "Flame":[4,2],
+  "Infinity":[8,4],
+  "Luck of the Sea":[4,2],
+  "Lure":[4,2],
+  "Frost Walker":[4,2],
+  "Mending":[4,2],
+  "Curse of Binding":[8,4],
+  "Curse of Vanishing":[8,4],
+  "Impaling":[4,2],
+  "Riptide":[4,2],
+  "Loyalty":[1,1],
+  "Channeling":[8,4],
+  "Multishot":[4,2],
+  "Piercing":[1,1],
+  "Quick Charge":[2,1],
+  "Soul Speed":[8,4],
+  "Swift Sneak":[8,4],
+  "Sweeping Edge":[4,2],
+  "Wind Burst":[4,2],
+  "Density":[2,1],
+  "Breach":[4,2],
+  "Lunge":[2,1]
+};
+
+// Incompatibility groups (Java)
+const INCOMPAT_GROUPS = [
+  new Set(["Protection","Fire Protection","Blast Protection","Projectile Protection"]),
+  new Set(["Sharpness","Smite","Bane of Arthropods"]),
+  new Set(["Depth Strider","Frost Walker"]),
+  new Set(["Infinity","Mending"]),
+  new Set(["Multishot","Piercing"]),
+  new Set(["Loyalty","Riptide"]),
+  new Set(["Channeling","Riptide"]),
+  new Set(["Density","Breach","Smite","Bane of Arthropods"]), // mace mutual exclusion (per your paste)
+  new Set(["Sharpness","Density","Breach"]) // book mutual exclusion (per your paste)
+];
+
+// Helper to build item enchant sets quickly
+const E = (...names) => new Set(names);
+
+// ALL 20 ITEMS (generic type list)
+const ITEMS = [
+  { name:"Axe", ench: E(
+    "Efficiency","Silk Touch","Fortune",
+    "Sharpness","Smite","Bane of Arthropods",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Boots", ench: E(
+    "Protection","Fire Protection","Blast Protection","Projectile Protection",
+    "Feather Falling","Depth Strider","Frost Walker","Soul Speed",
+    "Thorns","Unbreaking","Mending","Curse of Binding","Curse of Vanishing"
+  )},
+  { name:"Bow", ench: E(
+    "Power","Punch","Flame","Infinity",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Carrot on a Stick", ench: E(
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Chestplate", ench: E(
+    "Protection","Fire Protection","Blast Protection","Projectile Protection",
+    "Thorns","Unbreaking","Mending","Curse of Binding","Curse of Vanishing"
+  )},
+  { name:"Crossbow", ench: E(
+    "Multishot","Piercing","Quick Charge",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Elytra", ench: E(
+    "Unbreaking","Mending","Curse of Binding","Curse of Vanishing"
+  )},
+  { name:"Fishing Rod", ench: E(
+    "Luck of the Sea","Lure",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Helmet", ench: E(
+    "Protection","Fire Protection","Blast Protection","Projectile Protection",
+    "Respiration","Aqua Affinity",
+    "Thorns","Unbreaking","Mending","Curse of Binding","Curse of Vanishing"
+  )},
+  { name:"Hoe", ench: E(
+    "Efficiency","Silk Touch","Fortune",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Leggings", ench: E(
+    "Protection","Fire Protection","Blast Protection","Projectile Protection",
+    "Swift Sneak",
+    "Thorns","Unbreaking","Mending","Curse of Binding","Curse of Vanishing"
+  )},
+  { name:"Mace", ench: E(
+    "Wind Burst","Density","Breach",
+    "Smite","Bane of Arthropods","Fire Aspect",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Pickaxe", ench: E(
+    "Efficiency","Silk Touch","Fortune",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Shears", ench: E(
+    "Efficiency","Unbreaking","Mending","Curse of Vanishing"
+    // Silk Touch on shears is BE-only; add it here if you want it in your tool
+  )},
+  { name:"Shield", ench: E(
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Shovel", ench: E(
+    "Efficiency","Silk Touch","Fortune",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Spear", ench: E(
+    "Sharpness","Smite","Bane of Arthropods",
+    "Knockback","Fire Aspect","Looting",
+    "Lunge",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Sword", ench: E(
+    "Sharpness","Smite","Bane of Arthropods",
+    "Knockback","Fire Aspect","Looting","Sweeping Edge",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Trident", ench: E(
+    "Impaling","Riptide","Loyalty","Channeling",
+    "Unbreaking","Mending","Curse of Vanishing"
+  )},
+  { name:"Warped Fungus on a Stick", ench: E(
+    "Unbreaking","Mending","Curse of Vanishing"
+  )}
+];
+
+/* =========================
+   SOLVER (one-enchant-per-book)
+   ========================= */
+
+
+function valueBook(enchMap){
+  let t=0;
+  for (const [name,lvl] of Object.entries(enchMap)){
+    t += lvl * (MULT[name]?.[1] ?? 1);
+  }
+  return t;
+}
+
+function compatible(existingSet, newEnchant){
+  for (const grp of INCOMPAT_GROUPS){
+    if (grp.has(newEnchant)){
+      for (const e of existingSet){
+        if (grp.has(e)) return false;
+      }
+    }
+  }
+  return true;
+}
+function pwp(uses){ return Math.pow(2, uses) - 1; }
+// DP: build books (pairwise) + apply to item; prefer <=39 steps, else fallback
+function solvePlan(books, baseItemUses, rename, enforceSurvival){
+  const n = books.length;
+  const FULL = (1<<n)-1;
+  const MAXU = 20;
+  const INF = 1e18;
+
+  const subsetVal = new Array(1<<n).fill(INF);
+
+  for (let mask=1; mask<=FULL; mask++){
+    let ok=true;
+    let ench = {};
+    let seen = new Set();
+    for (let i=0;i<n;i++){
+      if (mask&(1<<i)){
+        const [e,lvl] = books[i];
+        if (seen.has(e) || !compatible(seen,e)){ ok=false; break; }
+        seen.add(e);
+        ench[e]=lvl;
+      }
+    }
+    if (ok){
+      subsetVal[mask]=valueBook(ench);
+    }
+  }
+
+  const dpb = Array.from({length:1<<n},()=>Array(MAXU+1).fill(INF));
+  const dpbBase = Array.from({length:1<<n},()=>Array(MAXU+1).fill(0));
+  const dpbPwp  = Array.from({length:1<<n},()=>Array(MAXU+1).fill(0));
+  const parB = Array.from({length:1<<n},()=>Array(MAXU+1).fill(null));
+
+  for (let i=0;i<n;i++){
+    const mask = 1<<i;
+    const u = books[i][2] ?? 0;
+    dpb[mask][u]=0;
+    parB[mask][u]=null;
+  }
+
+  for (let mask=1; mask<=FULL; mask++){
+    if (subsetVal[mask] >= INF) continue;
+    for (let sub=(mask-1)&mask; sub; sub=(sub-1)&mask){
+      const A=sub, B=mask^A;
+      if (!B) continue;
+      for (let uA=0; uA<=MAXU; uA++){
+        if (dpb[A][uA]>=INF) continue;
+        for (let uB=0; uB<=MAXU; uB++){
+          if (dpb[B][uB]>=INF) continue;
+          const uOut = Math.max(uA,uB)+1;
+          if (uOut>MAXU) continue;
+          const base = subsetVal[B];
+          const p = pwp(uA)+pwp(uB);
+          const opCost = base + p;
+          if (enforceSurvival && opCost>39) continue;
+          const total = dpb[A][uA] + dpb[B][uB] + opCost;
+          if (total < dpb[mask][uOut]){
+            dpb[mask][uOut]=total;
+            dpbBase[mask][uOut]=dpbBase[A][uA]+dpbBase[B][uB]+base;
+            dpbPwp[mask][uOut]=dpbPwp[A][uA]+dpbPwp[B][uB]+p;
+            parB[mask][uOut]={A,uA,B,uB};
+          }
+        }
+      }
+    }
+  }
+
+  const dpi = Array.from({length:1<<n},()=>Array(MAXU+1).fill(INF));
+  const dpiBase = Array.from({length:1<<n},()=>Array(MAXU+1).fill(0));
+  const dpiPwp  = Array.from({length:1<<n},()=>Array(MAXU+1).fill(0));
+  const parI = Array.from({length:1<<n},()=>Array(MAXU+1).fill(null));
+
+  dpi[0][baseItemUses]=0;
+
+  for (let mask=0; mask<=FULL; mask++){
+    for (let uItem=0; uItem<=MAXU; uItem++){
+      if (dpi[mask][uItem]>=INF) continue;
+      const remaining = FULL ^ mask;
+      for (let B=remaining; B; B=(B-1)&remaining){
+        for (let uB=0; uB<=MAXU; uB++){
+          if (dpb[B][uB]>=INF) continue;
+          const uOut = Math.max(uItem,uB)+1;
+          if (uOut>MAXU) continue;
+          const renamedHere = rename && ((mask|B)===FULL);
+          const base = subsetVal[B];
+          const p = pwp(uItem)+pwp(uB);
+          const r = renamedHere ? 1 : 0;
+          const opCost = base + p + r;
+          if (enforceSurvival && opCost>39) continue;
+          const newMask = mask|B;
+          const total = dpi[mask][uItem] + dpb[B][uB] + opCost;
+          if (total < dpi[newMask][uOut]){
+            dpi[newMask][uOut]=total;
+            dpiBase[newMask][uOut]=dpiBase[mask][uItem]+dpbBase[B][uB]+base;
+            dpiPwp[newMask][uOut]=dpiPwp[mask][uItem]+dpbPwp[B][uB]+p;
+            parI[newMask][uOut]={prevMask:mask, prevU:uItem, B, uB, renamedHere};
+          }
+        }
+      }
+    }
+  }
+
+  let bestCost=INF, bestU=-1;
+  for (let u=0; u<=MAXU; u++){
+    if (dpi[FULL][u] < bestCost){ bestCost=dpi[FULL][u]; bestU=u; }
+  }
+  if (bestCost>=INF) throw new Error("No plan found.");
+
+  const ops = [];
+  const builtCache = new Map();
+
+  function maskToIdxs(mask){
+    const arr=[];
+    for (let i=0;i<n;i++) if (mask&(1<<i)) arr.push(i);
+    return arr;
+  }
+  function bookNameSingle(i){
+    const [e,lvl] = books[i];
+    return `Book#${i}(${e} ${roman(lvl)})`;
+  }
+  function emitBook(mask, uses){
+    if ((mask&(mask-1))===0){
+      const i = Math.log2(mask)|0;
+      return bookNameSingle(i);
+    }
+    const key = `${mask}:${uses}`;
+    if (builtCache.has(key)) return builtCache.get(key);
+    const p = parB[mask][uses];
+    if (!p) return `Book[${maskToIdxs(mask).join(",")}]`;
+    const left = emitBook(p.A, p.uA);
+    const right = emitBook(p.B, p.uB);
+    const out = `Book[${maskToIdxs(mask).join(",")}]`;
+    const base = subsetVal[p.B];
+    const pw = pwp(p.uA)+pwp(p.uB);
+    const cost = base+pw;
+    ops.push({kind:"BOOK", left, right, out, leftUses:p.uA, rightUses:p.uB, outUses:Math.max(p.uA,p.uB)+1, base, pw, rename:0, cost});
+    builtCache.set(key,out);
+    return out;
+  }
+
+  let curMask=FULL, curU=bestU;
+  const chain=[];
+  while (curMask!==0){
+    const p = parI[curMask][curU];
+    chain.push(p);
+    curMask = p.prevMask;
+    curU = p.prevU;
+  }
+  chain.reverse();
+
+  let itemUses=baseItemUses;
+  for (const step of chain){
+    const bName = emitBook(step.B, step.uB);
+    const base = subsetVal[step.B];
+    const pw = pwp(itemUses)+pwp(step.uB);
+    const r = step.renamedHere ? 1 : 0;
+    const cost = base + pw + r;
+    ops.push({kind:"ITEM", left:"ITEM", right:bName, out:"ITEM", leftUses:itemUses, rightUses:step.uB, outUses:Math.max(itemUses,step.uB)+1, base, pw, rename:r, cost});
+    itemUses = Math.max(itemUses,step.uB)+1;
+  }
+
+  return {
+    total: bestCost,
+    baseSum: dpiBase[FULL][bestU],
+    pwpSum: dpiPwp[FULL][bestU],
+    ops
+  };
+}
+
+function solveWithFallback(books, baseItemUses, rename){
+  try{
+    const r = solvePlan(books, baseItemUses, rename, true);
+    const ok = r.ops.every(op => op.cost <= 39);
+    if (ok) return { ...r, survivalValid:true, fallback:false };
+  }catch(e){}
+  const r2 = solvePlan(books, baseItemUses, rename, false);
+  return { ...r2, survivalValid: r2.ops.every(op=>op.cost<=39), fallback:true };
+}
+
+/* =========================
+   UI
+   ========================= */
+
+const el = (id)=>document.getElementById(id);
+const itemSelect = el("itemSelect");
+const enchGrid = el("enchGrid");
+const statePill = el("statePill");
+const renameBox = el("rename");
+const itemUses = el("itemUses");
+const bookUsesMode = el("bookUsesMode");
+
+const out = el("out");
+const kTotal = el("kTotal");
+const kValid = el("kValid");
+const kBase = el("kBase");
+const kPwp = el("kPwp");
+const validBadge = el("validBadge");
+
+let selectedItem = ITEMS[0];
+let selectedEnchants = new Map(); // name -> level
+let perBookUses = new Map(); // name -> uses
+
+function setBadge(kind, text){
+  validBadge.className = "badge " + (kind||"");
+  validBadge.textContent = text;
+}
+function roman(n){
+  const m = {1:"I",2:"II",3:"III",4:"IV",5:"V"};
+  return m[n] || String(n);
+}
+function renderItemSelect(){
+  itemSelect.innerHTML = "";
+  ITEMS.forEach((it, idx)=>{
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = it.name;
+    itemSelect.appendChild(opt);
+  });
+  itemSelect.value = "0";
+}
+function makeEnchantedBookIcon() {
+  const img = document.createElement("img");
+  img.src = ICON.enchBook;
+  img.alt = "Enchanted Book";
+  img.style.width = "100%";
+  img.style.height = "100%";
+  img.style.imageRendering = "pixelated";
+
+  img.onerror = () => {
+    console.error("Failed to load enchanted book icon:", ICON.enchBook);
+    img.replaceWith(document.createTextNode("📘"));
+  };
+
+  return img;
+}
+
+function renderEnchantGrid(){
+  enchGrid.innerHTML = "";
+  const enchList = Array.from(selectedItem.ench).sort((a,b)=>a.localeCompare(b));
+
+  enchList.forEach((name)=>{
+    const mx = ENCHANT_MAX[name] ?? 1;
+    const on = selectedEnchants.has(name);
+
+    const tile = document.createElement("div");
+    tile.className = "tile" + (on ? " on" : "");
+    tile.dataset.ench = name;
+
+    const icon = document.createElement("div");
+    icon.className = "icon";
+    icon.appendChild(makeEnchantedBookIcon());
+    tile.appendChild(icon);
+
+    // --- title
+    const nm = document.createElement("div");
+    nm.className = "name";
+    nm.textContent = name;
+    tile.appendChild(nm);
+
+    // --- controls row (max + dropdown)
+    const controls = document.createElement("div");
+    controls.className = "controls";
+
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = `max ${roman(mx)}`;
+
+    const lvl = document.createElement("div");
+    lvl.className = "lvl";
+
+    const sel = document.createElement("select");
+    sel.disabled = false;
+
+    for (let i=1;i<=mx;i++){
+    const o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = roman(i);
+    sel.appendChild(o);
+    }
+    sel.value = on ? String(selectedEnchants.get(name)) : String(mx);
+
+    sel.addEventListener("click", (ev)=>ev.stopPropagation());
+    sel.addEventListener("change", ()=>{
+    const level = Number(sel.value);
+
+    if (!selectedEnchants.has(name)){
+        selectedEnchants.set(name, level);
+
+        if (bookUsesMode.value === "ask"){
+        const u = prompt(`Anvil uses for book "${name}" (0-20):`, "0");
+        const uu = Math.max(0, Math.min(20, Number(u||0)));
+        perBookUses.set(name, uu);
+        } else {
+        perBookUses.set(name, 0);
+        }
+
+        renderEnchantGrid();
+    } else {
+        selectedEnchants.set(name, level);
+    }
+
+    syncStatePill();
+    });
+
+lvl.appendChild(sel);
+
+controls.appendChild(sub);
+controls.appendChild(lvl);
+tile.appendChild(controls);
+
+
+    tile.addEventListener("click", ()=>{
+      if (selectedEnchants.has(name)){
+        selectedEnchants.delete(name);
+        perBookUses.delete(name);
+      }else{
+        selectedEnchants.set(name, mx);
+        if (bookUsesMode.value === "ask"){
+          const u = prompt(`Anvil uses for book "${name}" (0-20):`, "0");
+          const uu = Math.max(0, Math.min(20, Number(u||0)));
+          perBookUses.set(name, uu);
+        }else{
+          perBookUses.set(name, 0);
+        }
+      }
+      renderEnchantGrid();
+      syncStatePill();
+    });
+
+    enchGrid.appendChild(tile);
+  });
+}
+function syncStatePill(){
+  statePill.textContent = `${selectedEnchants.size} enchant(s) selected`;
+}
+function clearAll(){
+  selectedEnchants.clear();
+  perBookUses.clear();
+  renderEnchantGrid();
+  syncStatePill();
+  out.textContent = "Select an item + enchants, then press Calculate.";
+  kTotal.textContent = kValid.textContent = kBase.textContent = kPwp.textContent = "—";
+  setBadge("", "Waiting…");
+}
+function calculate(){
+  if (selectedEnchants.size === 0){
+    setBadge("warn", "Pick at least 1 enchant");
+    return;
+  }
+
+  const books = [];
+  for (const [name, lvl] of selectedEnchants.entries()){
+    const uses = perBookUses.get(name) ?? 0;
+    books.push([name, lvl, uses]);
+  }
+
+  const seen = new Set();
+  for (const [name] of books){
+    if (!compatible(seen, name)){
+      setBadge("bad", "Incompatible selection");
+      out.textContent = "Your selection contains incompatible enchantments. Remove conflicts and retry.";
+      return;
+    }
+    seen.add(name);
+  }
+
+  const baseUses = Math.max(0, Math.min(20, Number(itemUses.value || 0)));
+  const rename = !!renameBox.checked;
+
+  let res;
+  try{
+    res = solveWithFallback(books, baseUses, rename);
+  }catch(e){
+    setBadge("bad", "No plan found");
+    out.textContent = String(e?.message || e);
+    return;
+  }
+
+  const allUnder40 = res.ops.every(op => op.cost <= 39);
+  kTotal.textContent = String(res.total);
+  kBase.textContent = String(res.baseSum);
+  kPwp.textContent = String(res.pwpSum);
+  kValid.textContent = allUnder40 ? "Yes" : "No";
+
+  if (allUnder40){
+    setBadge("good", "Survival-valid (≤39 each step)");
+  }else{
+    setBadge("warn", "Last resort (some steps ≥40)");
+  }
+
+  out.innerHTML = renderResultHTML(selectedItem.name, rename, baseUses, books, res.ops);
+  refreshCommandOutput();
+
+}
+
+function loadBootsDemo(){
+  const boots = ITEMS.find(x=>x.name === "Boots");
+  if (!boots) return;
+
+  selectedItem = boots;
+  itemSelect.value = String(ITEMS.indexOf(boots));
+  selectedEnchants.clear(); perBookUses.clear();
+
+  const want = [
+    ["Soul Speed", 3],
+    ["Thorns", 3],
+    ["Feather Falling", 4],
+    ["Depth Strider", 3],
+    ["Protection", 4],
+    ["Unbreaking", 3],
+    ["Mending", 1],
+  ];
+  for (const [n,l] of want){
+    if (boots.ench.has(n)){
+      selectedEnchants.set(n,l);
+      perBookUses.set(n, 0);
+    }
+  }
+  renderEnchantGrid();
+  syncStatePill();
+  setBadge("", "Loaded demo");
+}
+
+itemSelect.addEventListener("change", ()=>{
+  selectedItem = ITEMS[Number(itemSelect.value)];
+  selectedEnchants.clear();
+  perBookUses.clear();
+  renderEnchantGrid();
+  syncStatePill();
+  setBadge("", "Waiting…");
+  out.textContent = "Select an item + enchants, then press Calculate.";
+});
+
+bookUsesMode.addEventListener("change", ()=>{
+  if (bookUsesMode.value === "0"){
+    for (const name of selectedEnchants.keys()) perBookUses.set(name, 0);
+  }
+});
+
+el("clearBtn").addEventListener("click", clearAll);
+el("calcBtn").addEventListener("click", calculate);
+el("demoBtn").addEventListener("click", loadBootsDemo);
+
+// init
+renderItemSelect();
+selectedItem = ITEMS[0];
+renderEnchantGrid();
+syncStatePill();
+setBadge("", "Waiting…");
+
+const rulesOverlay = document.getElementById("rulesOverlay");
+const rulesBtn = document.getElementById("rulesBtn");
+const rulesClose = document.getElementById("rulesClose");
+
+function openRules() {
+  rulesOverlay.removeAttribute("hidden");
+}
+
+function closeRules() {
+  rulesOverlay.setAttribute("hidden", "");
+}
+
+rulesBtn.addEventListener("click", openRules);
+
+rulesClose.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  closeRules();
+});
+
+rulesOverlay.addEventListener("click", (e) => {
+  if (e.target === rulesOverlay) closeRules();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeRules();
+});
+
+// ---------- Modal helpers ----------
+const modal = document.getElementById("commandModal");
+const commandOutput = document.getElementById("commandOutput");
+function refreshCommandOutput() {
+  commandOutput.value = buildGiveCommand();
+}
+
+function openModal() {
+  modal.classList.add("is-open");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeModal() {
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+modal.addEventListener("click", (e) => {
+  if (e.target.closest('[data-close="true"]')) closeModal();
+});
+
+
+const ITEM_ID = {
+  "Axe": "minecraft:diamond_axe",
+  "Boots": "minecraft:diamond_boots",
+  "Bow": "minecraft:bow",
+  "Carrot on a Stick": "minecraft:carrot_on_a_stick",
+  "Chestplate": "minecraft:diamond_chestplate",
+  "Crossbow": "minecraft:crossbow",
+  "Elytra": "minecraft:elytra",
+  "Fishing Rod": "minecraft:fishing_rod",
+  "Helmet": "minecraft:diamond_helmet",
+  "Hoe": "minecraft:diamond_hoe",
+  "Leggings": "minecraft:diamond_leggings",
+  "Mace": "minecraft:mace",                 // 1.21+
+  "Pickaxe": "minecraft:diamond_pickaxe",
+  "Shears": "minecraft:shears",
+  "Shield": "minecraft:shield",
+  "Shovel": "minecraft:diamond_shovel",
+  "Spear": "minecraft:trident",             // not vanilla; pick what you want
+  "Sword": "minecraft:diamond_sword",
+  "Trident": "minecraft:trident",
+  "Warped Fungus on a Stick": "minecraft:warped_fungus_on_a_stick"
+};
+
+// ---------- Command builder (Java 1.20.5+ style: data components) ----------
+function getSelectedItemId() {
+  // Use your actual selected item object
+  return ITEM_ID[selectedItem?.name] || "minecraft:stone";
+}
+
+const ENCHANT_ID = {
+  "Protection":"minecraft:protection",
+  "Fire Protection":"minecraft:fire_protection",
+  "Blast Protection":"minecraft:blast_protection",
+  "Projectile Protection":"minecraft:projectile_protection",
+  "Thorns":"minecraft:thorns",
+  "Unbreaking":"minecraft:unbreaking",
+  "Mending":"minecraft:mending",
+  "Curse of Binding":"minecraft:binding_curse",
+  "Curse of Vanishing":"minecraft:vanishing_curse",
+  "Feather Falling":"minecraft:feather_falling",
+  "Depth Strider":"minecraft:depth_strider",
+  "Frost Walker":"minecraft:frost_walker",
+  "Soul Speed":"minecraft:soul_speed",
+  "Respiration":"minecraft:respiration",
+  "Aqua Affinity":"minecraft:aqua_affinity",
+  "Swift Sneak":"minecraft:swift_sneak",
+  "Sharpness":"minecraft:sharpness",
+  "Smite":"minecraft:smite",
+  "Bane of Arthropods":"minecraft:bane_of_arthropods",
+  "Knockback":"minecraft:knockback",
+  "Fire Aspect":"minecraft:fire_aspect",
+  "Looting":"minecraft:looting",
+  "Sweeping Edge":"minecraft:sweeping_edge",
+  "Efficiency":"minecraft:efficiency",
+  "Silk Touch":"minecraft:silk_touch",
+  "Fortune":"minecraft:fortune",
+  "Power":"minecraft:power",
+  "Punch":"minecraft:punch",
+  "Flame":"minecraft:flame",
+  "Infinity":"minecraft:infinity",
+  "Multishot":"minecraft:multishot",
+  "Piercing":"minecraft:piercing",
+  "Quick Charge":"minecraft:quick_charge",
+  "Impaling":"minecraft:impaling",
+  "Riptide":"minecraft:riptide",
+  "Loyalty":"minecraft:loyalty",
+  "Channeling":"minecraft:channeling",
+  "Luck of the Sea":"minecraft:luck_of_the_sea",
+  "Lure":"minecraft:lure",
+  "Wind Burst":"minecraft:wind_burst",
+  "Density":"minecraft:density",
+  "Breach":"minecraft:breach",
+  "Lunge":"minecraft:lunge"
+};
+
+function getSelectedEnchantments() {
+  // Use your Map: selectedEnchants (name -> level)
+  const enchants = [];
+  for (const [name, lvl] of selectedEnchants.entries()) {
+    const id = ENCHANT_ID[name];
+    if (!id) continue;
+    enchants.push({ id, lvl: Number(lvl) });
+  }
+  return enchants;
+}
+
+function buildGiveCommand() {
+  const itemId = getSelectedItemId();
+  const enchants = getSelectedEnchantments();
+
+  // Format:
+  // /give @p minecraft:diamond_sword[minecraft:enchantments={levels:{minecraft:sharpness:5,minecraft:unbreaking:3}}] 1
+  if (!enchants.length) {
+    return `/give @p ${itemId} 1`;
+  }
+
+  const levelsPairs = enchants
+    .map(e => `${e.id}:${Math.floor(e.lvl)}`)
+    .join(",");
+
+  return `/give @p ${itemId}[minecraft:enchantments={levels:{${levelsPairs}}}] 1`;
+}
+
+// ---------- Wire up buttons ----------
+document.getElementById("btnGenerateCommand")?.addEventListener("click", () => {
+  refreshCommandOutput();
+  openModal();
+});
+
+document.getElementById("btnCopyCommand")?.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(commandOutput.value);
+  } catch {
+    // fallback
+    commandOutput.select();
+    document.execCommand("copy");
+  }
+});
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function renderResultHTML(itemName, rename, baseUses, books, ops){
+  const enchants = books
+    .map(([n,l]) => `${n} ${roman(l)}`)
+    .sort()
+    .join(", ");
+
+  const hdr = `
+    <div class="rhdr">
+      <div class="line"><b>Item:</b> ${esc(itemName)} &nbsp;&nbsp; <b>Rename:</b> ${rename ? "Yes" : "No"} &nbsp;&nbsp; <b>Uses:</b> ${baseUses}</div>
+      <div class="line"><b>Enchants:</b> ${esc(enchants)}</div>
+    </div>
+  `;
+
+  const steps = ops.map((op, i) => {
+    const tooExp = op.cost >= 40;
+    const pillClass = tooExp ? "bad" : "ok";
+    const KIND_TITLE = { ITEM: "Apply book to item", BOOK: "Combine books" };
+    const title = KIND_TITLE[op.kind] || op.kind;
+
+
+    return `
+      <div class="step">
+        <div class="step__top">
+          <div class="step__title">${i+1}. ${title}</div>
+          <div class="costpill ${pillClass}">${op.cost}${tooExp ? " (40+)" : ""}</div>
+        </div>
+        <div class="step__meta">
+          ${esc(op.left)} (u=${op.leftUses}) + ${esc(op.right)} (u=${op.rightUses})
+          → ${esc(op.out)} (u=${op.outUses})
+        </div>
+
+        <div class="eq">
+          cost = <b>base</b>(${op.base}) + <b>pwp</b>(${op.pw}) + <b>rename</b>(${op.rename}) = <b>${op.cost}</b>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return hdr + `<div class="steps">${steps}</div>`;
+}
+
+</script>
+</body>
+</html>
