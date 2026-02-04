@@ -47,9 +47,9 @@
         linear-gradient(180deg, #060a14, #070b17 40%);
     }
 
-    html, body {
-      background-color: #070b17;
-    }
+    html, body { background-color: var(--bg); }
+    body { min-height: 100svh; } /* better on mobile address-bar resizing */
+
 
     body{
       margin:0;
@@ -635,7 +635,16 @@
               <div class="hint">This is how many times the item has been used in an anvil (before enchanting)</div>
             </div>
           </div>
-
+          <div class="row" style="margin-top:10px">
+          <div class="field" style="flex:1 1 520px">
+            <label>Existing enchantments already on the item (optional)</label>
+            <input id="existingInput" type="text" placeholder='Example: "Mending 1, Unbreaking 3"' />
+            <div class="hint">
+              Enter enchant name + level, comma-separated. Levels can be 1-5 or Roman numerals (I-V).
+              These enchants are treated as already applied on the item.
+            </div>
+          </div>
+        </div>
           <div class="row" style="margin-top:10px">
             <div class="field">
               <label>Rename at the end?</label>
@@ -1080,7 +1089,7 @@ function solvePlan(books, baseItemUses, rename, enforceSurvival){
       }
     }
   }
-
+  
   let bestCost=INF, bestU=-1;
   for (let u=0; u<=MAXU; u++){
     if (dpi[FULL][u] < bestCost){ bestCost=dpi[FULL][u]; bestU=u; }
@@ -1169,7 +1178,7 @@ const statePill = el("statePill");
 const renameBox = el("rename");
 const itemUses = el("itemUses");
 const bookUsesMode = el("bookUsesMode");
-
+const existingInput = el("existingInput");
 const out = el("out");
 const kTotal = el("kTotal");
 const kValid = el("kValid");
@@ -1322,6 +1331,55 @@ tile.appendChild(controls);
 function syncStatePill(){
   statePill.textContent = `${selectedEnchants.size} enchant(s) selected`;
 }
+function romanToInt(s){
+  if (!s) return NaN;
+  const t = String(s).trim().toUpperCase();
+  const map = {I:1, II:2, III:3, IV:4, V:5};
+  if (map[t]) return map[t];
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function parseExistingEnchants(str, item){
+  const m = new Map(); // name -> level
+  const raw = (str || "").trim();
+  if (!raw) return m;
+
+  // split by commas
+  const parts = raw.split(",").map(x => x.trim()).filter(Boolean);
+
+  for (const part of parts){
+    // Accept formats like:
+    // "Unbreaking 3" or "Unbreaking III"
+    // last token is level; everything before is enchant name
+    const tokens = part.split(/\s+/).filter(Boolean);
+    if (tokens.length < 2) throw new Error(`Bad existing enchant format: "${part}"`);
+
+    const lvlToken = tokens[tokens.length - 1];
+    const name = tokens.slice(0, -1).join(" ");
+    const lvl = romanToInt(lvlToken);
+
+    if (!ENCHANT_MAX[name]) throw new Error(`Unknown enchant: "${name}"`);
+    if (!item.ench.has(name)) throw new Error(`"${name}" isn't valid for item "${item.name}"`);
+
+    const mx = ENCHANT_MAX[name] ?? 1;
+    if (!Number.isInteger(lvl) || lvl < 1 || lvl > mx){
+      throw new Error(`Level for "${name}" must be 1-${mx} (got "${lvlToken}")`);
+    }
+
+    m.set(name, lvl);
+  }
+
+  // Check compatibility inside existing set
+  const seen = new Set();
+  for (const name of m.keys()){
+    if (!compatible(seen, name)) throw new Error(`Existing enchants contain an incompatibility: "${name}"`);
+    seen.add(name);
+  }
+
+  return m;
+}
+
 function clearAll(){
   selectedEnchants.clear();
   perBookUses.clear();
@@ -1332,27 +1390,57 @@ function clearAll(){
   setBadge("", "Waiting…");
 }
 function calculate(){
+  // 1) Must pick something
   if (selectedEnchants.size === 0){
     setBadge("warn", "Pick at least 1 enchant");
     return;
   }
 
+  // 2) Parse existing enchants (optional)
+  let existingMap = new Map();
+  try {
+    existingMap = parseExistingEnchants(existingInput?.value, selectedItem);
+  } catch (e) {
+    setBadge("bad", "Existing enchants invalid");
+    out.textContent = String(e?.message || e);
+    return;
+  }
+
+  // 3) Build books list, skipping anything already on item at same/higher level
   const books = [];
   for (const [name, lvl] of selectedEnchants.entries()){
     const uses = perBookUses.get(name) ?? 0;
+    const existingLvl = existingMap.get(name);
+
+    if (existingLvl != null && existingLvl >= lvl) continue;
     books.push([name, lvl, uses]);
   }
 
-  const seen = new Set();
+  // 4) If nothing to add
+  if (books.length === 0){
+    setBadge("good", "Nothing to add");
+    out.textContent = "All selected enchants are already on the item at the same or higher level.";
+    kTotal.textContent = "0";
+    kBase.textContent = "0";
+    kPwp.textContent = "0";
+    kValid.textContent = "Yes";
+    refreshCommandOutput(existingMap);
+    return;
+  }
+
+  // 5) Compatibility check including existing item enchants
+  const seen = new Set(existingMap.keys());
   for (const [name] of books){
     if (!compatible(seen, name)){
       setBadge("bad", "Incompatible selection");
-      out.textContent = "Your selection contains incompatible enchantments. Remove conflicts and retry.";
+      out.textContent =
+        "Your selection contains incompatible enchantments (including existing item enchants). Remove conflicts and retry.";
       return;
     }
     seen.add(name);
   }
 
+  // 6) Solve
   const baseUses = Math.max(0, Math.min(20, Number(itemUses.value || 0)));
   const rename = !!renameBox.checked;
 
@@ -1365,22 +1453,19 @@ function calculate(){
     return;
   }
 
+  // 7) Render output
   const allUnder40 = res.ops.every(op => op.cost <= 39);
   kTotal.textContent = String(res.total);
   kBase.textContent = String(res.baseSum);
   kPwp.textContent = String(res.pwpSum);
   kValid.textContent = allUnder40 ? "Yes" : "No";
 
-  if (allUnder40){
-    setBadge("good", "Survival-valid (≤39 each step)");
-  }else{
-    setBadge("warn", "Last resort (some steps ≥40)");
-  }
+  setBadge(allUnder40 ? "good" : "warn", allUnder40 ? "Survival-valid (≤39 each step)" : "Last resort (some steps ≥40)");
 
   out.innerHTML = renderResultHTML(selectedItem.name, rename, baseUses, books, res.ops);
-  refreshCommandOutput();
-
+  refreshCommandOutput(existingMap);
 }
+
 
 function loadBootsDemo(){
   const boots = ITEMS.find(x=>x.name === "Boots");
@@ -1468,9 +1553,10 @@ document.addEventListener("keydown", (e) => {
 // ---------- Modal helpers ----------
 const modal = document.getElementById("commandModal");
 const commandOutput = document.getElementById("commandOutput");
-function refreshCommandOutput() {
-  commandOutput.value = buildGiveCommand();
+function refreshCommandOutput(existingMapOverride) {
+  commandOutput.value = buildGiveCommand(existingMapOverride);
 }
+
 
 function openModal() {
   modal.classList.add("is-open");
@@ -1562,10 +1648,25 @@ const ENCHANT_ID = {
   "Lunge":"minecraft:lunge"
 };
 
-function getSelectedEnchantments() {
-  // Use your Map: selectedEnchants (name -> level)
+function getAllEnchantmentsForCommand(existingMapOverride){
+  // existingMapOverride optional: Map(name->lvl)
+  const levels = new Map();
+
+  // 1) existing
+  const ex = existingMapOverride instanceof Map ? existingMapOverride : new Map();
+  for (const [name, lvl] of ex.entries()){
+    levels.set(name, lvl);
+  }
+
+  // 2) selected (take max)
+  for (const [name, lvl] of selectedEnchants.entries()){
+    const cur = levels.get(name) ?? 0;
+    levels.set(name, Math.max(cur, Number(lvl)));
+  }
+
+  // convert to command format
   const enchants = [];
-  for (const [name, lvl] of selectedEnchants.entries()) {
+  for (const [name, lvl] of levels.entries()){
     const id = ENCHANT_ID[name];
     if (!id) continue;
     enchants.push({ id, lvl: Number(lvl) });
@@ -1573,15 +1674,12 @@ function getSelectedEnchantments() {
   return enchants;
 }
 
-function buildGiveCommand() {
-  const itemId = getSelectedItemId();
-  const enchants = getSelectedEnchantments();
 
-  // Format:
-  // /give @p minecraft:diamond_sword[minecraft:enchantments={levels:{minecraft:sharpness:5,minecraft:unbreaking:3}}] 1
-  if (!enchants.length) {
-    return `/give @p ${itemId} 1`;
-  }
+function buildGiveCommand(existingMapOverride) {
+  const itemId = getSelectedItemId();
+  const enchants = getAllEnchantmentsForCommand(existingMapOverride);
+
+  if (!enchants.length) return `/give @p ${itemId} 1`;
 
   const levelsPairs = enchants
     .map(e => `${e.id}:${Math.floor(e.lvl)}`)
@@ -1590,12 +1688,15 @@ function buildGiveCommand() {
   return `/give @p ${itemId}[minecraft:enchantments={levels:{${levelsPairs}}}] 1`;
 }
 
+
 // ---------- Wire up buttons ----------
 document.getElementById("btnGenerateCommand")?.addEventListener("click", () => {
-  refreshCommandOutput();
+  // use what's currently typed in the box
+  let ex = new Map();
+  try { ex = parseExistingEnchants(existingInput?.value, selectedItem); } catch {}
+  refreshCommandOutput(ex);
   openModal();
 });
-
 document.getElementById("btnCopyCommand")?.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(commandOutput.value);
