@@ -84,8 +84,7 @@
       font-size:15px;
     }
     .grid{ display:grid; grid-template-columns: 1fr; gap:14px; margin-top:22px; }
-    /* Only allow light theme on touch / coarse-pointer devices (most phones/tablets) */
-    @media (prefers-color-scheme: light) and (pointer: coarse) {
+    @media (prefers-color-scheme: light) {
       :root{
         --bg:#f7f8ff;
         --panel:#ffffff;
@@ -599,6 +598,21 @@
       height: 16px;
     }
 
+    .btn:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      transform:none !important;
+      pointer-events:none;
+    }
+
+    /* Mobile: full-width Calculate, pairs for the rest */
+    @media (max-width:520px){
+      .btnbar{ gap:8px }
+      .btnbar .btn{ flex:1 1 calc(50% - 4px); justify-content:center; font-size:13px; padding:11px 10px }
+      .btnbar .btn:first-child{ flex:1 1 100% }
+      .corner-footer{ right:8px; bottom:8px; padding:6px 10px; font-size:11px }
+      .kpi{ grid-template-columns: repeat(2, minmax(0,1fr)) }
+    }
 
   </style>
 </head>
@@ -689,6 +703,7 @@
             </button>
             <button class="btn secondary" id="demoBtn" type="button">Load Demo</button>
             <button class="btn secondary" id="btnGenerateCommand" type="button">Generate Command</button>
+            <button class="btn secondary" id="btnShare" type="button">Share</button>
           </div>
 
           <div class="hint" style="margin-top:10px">
@@ -1106,7 +1121,7 @@ function solvePlan(books, baseItemUses, rename, enforceSurvival){
   }
   function bookNameSingle(i){
     const [e,lvl] = books[i];
-    return `Book#${i}(${e} ${roman(lvl)})`;
+    return `${e} ${roman(lvl)} book`;
   }
   function emitBook(mask, uses){
     if ((mask&(mask-1))===0){
@@ -1116,10 +1131,10 @@ function solvePlan(books, baseItemUses, rename, enforceSurvival){
     const key = `${mask}:${uses}`;
     if (builtCache.has(key)) return builtCache.get(key);
     const p = parB[mask][uses];
-    if (!p) return `Book[${maskToIdxs(mask).join(",")}]`;
+    if (!p) return `Combined book (${maskToIdxs(mask).map(j => `${books[j][0]} ${roman(books[j][1])}`).join(' + ')})`;
     const left = emitBook(p.A, p.uA);
     const right = emitBook(p.B, p.uB);
-    const out = `Book[${maskToIdxs(mask).join(",")}]`;
+    const out = `Combined book (${maskToIdxs(mask).map(j => `${books[j][0]} ${roman(books[j][1])}`).join(' + ')})`;
     const base = subsetVal[p.B];
     const pw = pwp(p.uA)+pwp(p.uB);
     const cost = base+pw;
@@ -1389,7 +1404,81 @@ function clearAll(){
   kTotal.textContent = kValid.textContent = kBase.textContent = kPwp.textContent = "—";
   setBadge("", "Waiting…");
 }
+
+function getShareURL(){
+  const params = new URLSearchParams();
+  params.set('item', selectedItem.name);
+  const usesVal = itemUses.value;
+  if (usesVal && usesVal !== '0') params.set('uses', usesVal);
+  if (renameBox.checked) params.set('rename', '1');
+  const exStr = existingInput.value.trim();
+  if (exStr) params.set('existing', exStr);
+  if (bookUsesMode.value !== '0') params.set('bmode', bookUsesMode.value);
+  const enchParts = [];
+  for (const [name, lvl] of selectedEnchants.entries()){
+    const uses = perBookUses.get(name) ?? 0;
+    enchParts.push(uses > 0 ? `${name}:${lvl}:${uses}` : `${name}:${lvl}`);
+  }
+  if (enchParts.length) params.set('e', enchParts.join(','));
+  return location.origin + location.pathname + '#' + params.toString();
+}
+
+function loadFromURL(){
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+  let params;
+  try { params = new URLSearchParams(hash); } catch { return; }
+
+  const itemName = params.get('item');
+  if (itemName){
+    const idx = ITEMS.findIndex(x => x.name === itemName);
+    if (idx >= 0){ selectedItem = ITEMS[idx]; itemSelect.value = String(idx); }
+  }
+
+  const usesVal = params.get('uses');
+  if (usesVal != null) itemUses.value = usesVal;
+  if (params.get('rename') === '1') renameBox.checked = true;
+  const exStr = params.get('existing');
+  if (exStr) existingInput.value = exStr;
+  const bmode = params.get('bmode');
+  if (bmode) bookUsesMode.value = bmode;
+
+  const eStr = params.get('e');
+  if (eStr){
+    selectedEnchants.clear();
+    perBookUses.clear();
+    for (const part of eStr.split(',')){
+      const tokens = part.split(':');
+      if (tokens.length < 2) continue;
+      const name = tokens[0];
+      const lvl = parseInt(tokens[1], 10);
+      const uses = tokens[2] ? parseInt(tokens[2], 10) : 0;
+      if (ENCHANT_MAX[name] && selectedItem.ench.has(name) && lvl >= 1){
+        selectedEnchants.set(name, lvl);
+        perBookUses.set(name, uses);
+      }
+    }
+  }
+  renderEnchantGrid();
+  syncStatePill();
+}
+
 function calculate(){
+  const calcBtnEl = el("calcBtn");
+  calcBtnEl.disabled = true;
+  const prevHTML = calcBtnEl.innerHTML;
+  calcBtnEl.innerHTML = 'Calculating\u2026';
+  setBadge("", "Calculating\u2026");
+  setTimeout(()=>{
+    try { _calculate(); }
+    finally {
+      calcBtnEl.disabled = false;
+      calcBtnEl.innerHTML = prevHTML;
+    }
+  }, 0);
+}
+
+function _calculate(){
   // 1) Must pick something
   if (selectedEnchants.size === 0){
     setBadge("warn", "Pick at least 1 enchant");
@@ -1464,6 +1553,7 @@ function calculate(){
 
   out.innerHTML = renderResultHTML(selectedItem.name, rename, baseUses, books, res.ops);
   refreshCommandOutput(existingMap);
+  history.replaceState(null, '', getShareURL());
 }
 
 
@@ -1521,6 +1611,7 @@ selectedItem = ITEMS[0];
 renderEnchantGrid();
 syncStatePill();
 setBadge("", "Waiting…");
+loadFromURL();
 
 const rulesOverlay = document.getElementById("rulesOverlay");
 const rulesBtn = document.getElementById("rulesBtn");
@@ -1697,6 +1788,24 @@ document.getElementById("btnGenerateCommand")?.addEventListener("click", () => {
   refreshCommandOutput(ex);
   openModal();
 });
+el("btnShare")?.addEventListener("click", async () => {
+  const url = getShareURL();
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  const btn = el("btnShare");
+  const prev = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = prev; }, 1500);
+});
+
 document.getElementById("btnCopyCommand")?.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(commandOutput.value);
@@ -1730,7 +1839,8 @@ function renderResultHTML(itemName, rename, baseUses, books, ops){
     const pillClass = tooExp ? "bad" : "ok";
     const KIND_TITLE = { ITEM: "Apply book to item", BOOK: "Combine books" };
     const title = KIND_TITLE[op.kind] || op.kind;
-
+    const leftLabel = op.left === 'ITEM' ? itemName : op.left;
+    const outLabel  = op.out  === 'ITEM' ? itemName : op.out;
 
     return `
       <div class="step">
@@ -1739,8 +1849,8 @@ function renderResultHTML(itemName, rename, baseUses, books, ops){
           <div class="costpill ${pillClass}">${op.cost}${tooExp ? " (40+)" : ""}</div>
         </div>
         <div class="step__meta">
-          ${esc(op.left)} (u=${op.leftUses}) + ${esc(op.right)} (u=${op.rightUses})
-          → ${esc(op.out)} (u=${op.outUses})
+          ${esc(leftLabel)} (u=${op.leftUses}) + ${esc(op.right)} (u=${op.rightUses})
+          → ${esc(outLabel)} (u=${op.outUses})
         </div>
 
         <div class="eq">
