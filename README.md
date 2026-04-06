@@ -23,6 +23,7 @@ PWP(u) = 2^u − 1
 where `u` is the number of prior anvil uses on that item or book.
 
 ## Project Structure
+```
 anvil-enchant-planner/
 ├─ index.html
 ├─ assets/
@@ -32,6 +33,7 @@ anvil-enchant-planner/
    ├─ favicon-16.png
    ├─ favicon-32.png
    └─ apple-touch-icon.png
+```
 
 ## Running Locally
 No build step needed — just open `index.html` in a browser, or use something like VS Code Live Server.
